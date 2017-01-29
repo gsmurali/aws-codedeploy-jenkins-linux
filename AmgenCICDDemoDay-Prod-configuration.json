@@ -1,0 +1,10 @@
+{
+  "Parameters" : {
+    "InstanceCreateType" : "t2.micro",
+    "InstanceEC2TagKey" : "Name",
+    "InstanceEC2TagValue" : "AmgenCICDDemoDay-Prod",
+    "InstanceKeyName" : "devops",    
+    "InstanceProfileCreate" : "Existing",
+    "InstanceProfileExisting" :"CodeDeployTemplate-0105-CodeDeployInstanceProfile-KU6HF7LTLUKL"
+  }
+}
