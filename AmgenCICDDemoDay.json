@@ -216,5 +216,16 @@
 		}
       } 
 	}
-  }
+  },
+	"Outputs"                  : {
+        "CodeDeployInstanceIPaddress" : {
+            "Description" : "IP address of the instance",
+            "Value"       : {
+                "Fn::GetAtt" : [
+                    "CodeDeployInstance",
+                    "PrivateIp"
+                ]
+            }
+        }
+    }
 }
