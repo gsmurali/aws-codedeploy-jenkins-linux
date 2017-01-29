@@ -1,0 +1,220 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Sets up target QA/Prod environment EC2 instance.",
+  "Metadata": {
+    "AWS::CloudFormation::Interface": {
+      "ParameterGroups": [ 
+	    {
+		  "Label": { "default": "Deployment Target Settings" },
+		  "Parameters": [
+		  "InstanceCreateType",
+			"InstanceEC2TagKey",
+			"InstanceEC2TagValue",
+			"InstanceKeyName",
+			"InstanceProfileCreate",
+			"InstanceProfileExisting"
+		  ]
+		}
+	  ],
+      "ParameterLabels": {
+	  "InstanceCreateType": { "default": "InstanceType" },
+		"InstanceEC2TagKey": { "default": "TagKey" },
+		"InstanceEC2TagValue": { "default": "TagValue" },
+		"InstanceKeyName": { "default": "KeyPair" },
+		"InstanceProfileCreate": { "default": "InstanceProfile" },
+		"InstanceProfileExisting": { "default": "InstanceProfileName" }
+	  }      
+    }
+  },
+  "Parameters": {
+    "InstanceCreateType": {
+	  "Type": "String",
+      "Default": "t2.micro",
+      "Description": "The type of Amazon EC2 instance to launch. The default is 't2.micro'."
+	},
+	"InstanceEC2TagKey": {
+	  "Type": "String",
+      "Default": "Name",
+      "Description": "The Amazon EC2 tag filter key to use. The default is 'Name'."
+	},
+	"InstanceEC2TagValue": {
+	  "Type": "String",
+      "Default": "AmgenDemoCodeDeploy-QA",
+      "Description": "The Amazon EC2 tag filter value to use. The default is 'AmgenDemoCodeDeploy-QA'."
+	},
+	"InstanceKeyName": {
+	  "Type": "String",
+      "Description": "The name of the Amazon EC2 key pair to use to log on to the instance."
+	},
+    "InstanceProfileCreate": {
+	  "Type": "String",
+	  "Default": "Existing",
+	  "AllowedValues": [
+	    "Existing", "New", "Skip"
+	  ],
+	  "Description": "Create a new AWS CodeDeploy instance profile for the instance to use, or have the instance use an existing AWS CodeDeploy instance profile?" 
+	},
+	"InstanceProfileExisting": {
+	  "Type": "String",
+	  "Default": "CodeDeployTemplate-0105-CodeDeployInstanceProfile-KU6HF7LTLUKL",	  
+	  "Description": "If 'InstanceProfile' is set to 'Existing', the name (not the ARN) of the existing AWS CodeDeploy instance profile for the instance to use."
+	}
+  },
+  "Conditions": {
+    "CreateInstanceProfile": { "Fn::Equals": [ { "Ref": "InstanceProfileCreate" }, "New" ] },
+	"LaunchInstanceUseExistingProfile": { "Fn::Equals": [ { "Ref": "InstanceProfileCreate" }, "Existing" ] }
+  },
+  "Resources": {
+ 	"CodeDeployInstanceProfileRole": {
+	  "Type": "AWS::IAM::Role",
+	  "Condition": "CreateInstanceProfile",
+      "Properties": {
+	    "AssumeRolePolicyDocument": {
+          "Version" : "2012-10-17",
+          "Statement": [ 
+		    {
+			  "Sid": "CodeDeployInstanceProfileTrustStatement",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [ 
+				  "ec2.amazonaws.com" 
+				]
+              },
+              "Action": "sts:AssumeRole"
+            }
+		  ]
+		},
+		"Path": "/",
+		"Policies": [
+		  {
+            "PolicyName": "CodeDeployInstanceProfilePolicy",
+            "PolicyDocument": {
+              "Version" : "2012-10-17",
+              "Statement": [
+			    {
+				  "Sid": "CodeDeployInstanceProfilePolicyStatement",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:Get*",
+                    "s3:List*"
+                  ],
+                  "Resource": "*"
+                }
+			  ]
+            }
+          } 
+		]
+      }	
+	},
+	"CodeDeployInstanceProfile": {
+	  "Type": "AWS::IAM::InstanceProfile",
+	  "Condition": "CreateInstanceProfile",
+      "Properties": {
+        "Path": "/",
+        "Roles": [
+		  {
+            "Ref": "CodeDeployInstanceProfileRole"
+          }
+        ]
+      }
+	},
+	"CodeDeployInstance": {
+      "Type" : "AWS::EC2::Instance",
+	  "Properties": {
+        "IamInstanceProfile": {
+		  "Fn::If": [
+		    "LaunchInstanceUseExistingProfile",
+			{ "Ref": "InstanceProfileExisting" },
+			{ "Ref": "CodeDeployInstanceProfile" }
+		  ]		  
+		},
+        "ImageId": "ami-1e299d7e",
+        "SubnetId": "subnet-520b1224",
+        "InstanceType" : {
+		  "Ref": "InstanceCreateType"
+		},
+        "KeyName": {
+		  "Ref": "InstanceKeyName"
+		},
+		"SecurityGroupIds": [
+		  { 
+		    "Ref": "CodeDeployInstanceSecurityGroup" 
+		  }  
+		],        
+        "Tags" : [ 
+		  {
+		    "Key": {
+			  "Ref": "InstanceEC2TagKey"
+			},
+			"Value": {
+		      "Ref": "InstanceEC2TagValue"
+		    }
+		  },
+		  {
+			"Key": "Amgen POC Use Case#",
+			"Value": "3"
+		  },
+		  {
+			"Key": "Cost_Center",
+			"Value": "13786"
+		  },
+		  {
+			"Key": "Owner",
+			"Value": "msubra01"
+		  }
+		],
+        "UserData": { 
+		  "Fn::Base64": { 
+		    "Fn::Join": [ "", 
+			  [
+			    "#!/bin/bash -ex", "\n",
+                "yum -y update", "\n",
+                "yum install -y ruby", "\n",
+                "yum install -y aws-cli", "\n",
+                "cd /home/ec2-user", "\n",
+                "aws s3 cp s3://aws-codedeploy-us-east-1/latest/install . --region us-east-1", "\n",
+                "chmod +x ./install", "\n",
+                "./install auto"
+		      ]
+			]
+		  }
+		}
+      }
+    },
+	"CodeDeployInstanceSecurityGroup": {
+	  "Type": "AWS::EC2::SecurityGroup",
+	  "Properties": {
+	  	"VpcId": "vpc-f4298e93",
+	    "GroupDescription": "Allow SSH and HTTP access to the instance."
+      }
+	},
+	"CodeDeployInstanceSecurityGroupSSHIngress" : {
+	  "Type": "AWS::EC2::SecurityGroupIngress",
+	    "Properties": {
+        "IpProtocol" : "tcp",
+        "FromPort" : "22",
+        "ToPort" : "22",
+        "CidrIp" : "0.0.0.0/0",
+		"GroupId": {
+		  "Fn::GetAtt": [
+		    "CodeDeployInstanceSecurityGroup", "GroupId"
+		  ]
+		}
+      } 
+	},
+	"CodeDeployInstanceSecurityGroupHTTPIngress" : {
+	  "Type": "AWS::EC2::SecurityGroupIngress",
+	  "Properties": {
+        "IpProtocol" : "tcp",
+        "FromPort" : "80",
+        "ToPort" : "80",
+        "CidrIp" : "0.0.0.0/0",
+		"GroupId": {
+		  "Fn::GetAtt": [
+		    "CodeDeployInstanceSecurityGroup", "GroupId"
+		  ]
+		}
+      } 
+	}
+  }
+}
